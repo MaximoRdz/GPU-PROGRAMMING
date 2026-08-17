@@ -1,6 +1,7 @@
 #include <opencv2/opencv.hpp>
 #include <iostream>
 #include <chrono>
+#include "grayscale_cuda.h"
 
 void myGrayImage(const cv::Mat& image, cv::Mat& output_image)
 {
@@ -95,9 +96,23 @@ int main(int argc, char* argv[])
 
     std::cout << "myGrayImageOpt Average time per call: " << avg_execution_time << " microseconds\n";
 
-    // Finally some viz
-    myGrayImage(resized, gray_image);
+    launchGrayScaleConversion(resized.data, gray_image.data, resized.cols, resized.rows,
+                               resized.channels(), nullptr, nullptr);
 
+    double totalKernelMs = 0.0, totalFullMs = 0.0;
+    for (size_t i = 0; i < iterations; ++i) {
+        float kernelMs = 0.0f, fullMs = 0.0f;
+        launchGrayScaleConversion(resized.data, gray_image.data, resized.cols, resized.rows,
+                                   resized.channels(), &kernelMs, &fullMs);
+        totalKernelMs += kernelMs;
+        totalFullMs += fullMs;
+    }
+    std::cout << "CUDA kernel-only Average time per call: "
+              << (totalKernelMs / iterations) * 1000.0 << " microseconds\n";
+    std::cout << "CUDA total (incl. transfers) Average time per call: "
+              << (totalFullMs / iterations) * 1000.0 << " microseconds\n";
+
+    // Finally some viz
     cv::imshow("Image Viewer", gray_image);
 
     cv::waitKey(0);
