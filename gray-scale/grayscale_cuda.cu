@@ -16,25 +16,32 @@ do {       \
 // __global__: function call from the CPU but run on the GPU
 __global__ void grayScaleKernel(
         const unsigned char* input, unsigned char* output,
-        int width, int height, int channels
+        int width, int height, int channels,
+        size_t inputStep, size_t outputStep
         )
 {
     int col = blockIdx.x * blockDim.x + threadIdx.x;
     int row = blockIdx.y * blockDim.y + threadIdx.y;
 
     if (col < width && row < height) {
-        int idx = (row * width + col) * channels;
-        unsigned char B = input[idx + 0];
-        unsigned char R = input[idx + 1];
-        unsigned char G = input[idx + 2];
+        /* int idx = (row * width + col) * channels; */
+        const unsigned char* in_row = input + row * inputStep;
+        unsigned char* out_row = output + row * outputStep;
 
-        output[row * width + col] =
+        int idx = col * channels;
+        
+        unsigned char B = in_row[idx + 0];
+        unsigned char G = in_row[idx + 1];
+        unsigned char R = in_row[idx + 2];
+
+        out_row[col] =
             (unsigned char)(0.299f * R + 0.587f * G + 0.114f * B);
     }
 }
 
 void launchGrayScaleConversion(const unsigned char* h_input, 
         unsigned char* h_output, int width, int height, int channels, 
+        size_t inputStep, size_t outputStep,
         float* kernelTimeMs, float* totalTimeMs)
 {
     size_t inputSize = (size_t)(width) * height * channels;
@@ -63,15 +70,33 @@ void launchGrayScaleConversion(const unsigned char* h_input,
 
     CUDA_CHECK(cudaEventRecord(startKernel));
 
-    grayScaleKernel<<<gridDim, blockDim>>>(d_input, d_output, width, height, channels);
+    grayScaleKernel<<<gridDim, blockDim>>>(d_input, d_output, width, height, channels, inputStep, outputStep);
 
     CUDA_CHECK(cudaEventRecord(stopKernel));
+    CUDA_CHECK(cudaEventSynchronize(stopKernel));
     
     CUDA_CHECK(cudaMemcpy(h_output, d_output, outputSize, cudaMemcpyDeviceToHost));
 
     CUDA_CHECK(cudaEventRecord(stopTotal));
-    CUDA_CHECK(cudaEventSynchronize(stopTotal));
     
+    CUDA_CHECK(cudaEventSynchronize(stopTotal));
+
+    if (kernelTimeMs != nullptr){
+        CUDA_CHECK(cudaEventElapsedTime(
+            kernelTimeMs,
+            startKernel,
+            stopKernel
+        ));
+    }
+
+    if (totalTimeMs != nullptr){
+        CUDA_CHECK(cudaEventElapsedTime(
+            totalTimeMs,
+            startTotal,
+            stopTotal
+        ));
+    }
+
     CUDA_CHECK(cudaFree(d_input));
     CUDA_CHECK(cudaFree(d_output));
     CUDA_CHECK(cudaEventDestroy(startTotal));

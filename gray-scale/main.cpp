@@ -34,6 +34,17 @@ void myGrayImageOpt(const cv::Mat& image, cv::Mat& output_image)
     }
 }
 
+double maxDiff(const cv::Mat& A, const cv::Mat& B)
+{
+    cv::Mat diff;
+    cv::absdiff(A, B, diff);
+    
+    double max_diff;
+    cv::minMaxLoc(diff, nullptr, &max_diff);
+
+    return max_diff;
+}
+
 int main(int argc, char* argv[])
 {
     if (argc != 2) {
@@ -55,14 +66,16 @@ int main(int argc, char* argv[])
     double scale = 1024.0f / std::max(image.cols, image.rows);
     cv::resize(image, resized, cv::Size(), scale, scale);
 
-    cv::Mat gray_image(resized.rows, resized.cols, CV_8UC1);
+    cv::Mat gray_image_cv(resized.rows, resized.cols, CV_8UC1);
+    cv::Mat gray_image_my(resized.rows, resized.cols, CV_8UC1);
+    cv::Mat gray_image_gpu(resized.rows, resized.cols, CV_8UC1);
 
-    const size_t iterations = 1000;
-    cv::cvtColor(resized, gray_image, cv::COLOR_BGR2GRAY);
+    const size_t iterations = 100;
+    cv::cvtColor(resized, gray_image_cv, cv::COLOR_BGR2GRAY);
 
     auto start = std::chrono::high_resolution_clock::now();
     for (size_t i=0; i < iterations; ++i){
-        cv::cvtColor(resized, gray_image, cv::COLOR_BGR2GRAY);
+        cv::cvtColor(resized, gray_image_cv, cv::COLOR_BGR2GRAY);
     }
     auto end = std::chrono::high_resolution_clock::now();
     
@@ -72,10 +85,10 @@ int main(int argc, char* argv[])
     std::cout << "OpenCV Average time per call: " << avg_execution_time << " microseconds\n";
 
     
-    myGrayImage(resized, gray_image);
+    myGrayImage(resized, gray_image_my);
     start = std::chrono::high_resolution_clock::now();
     for (size_t i=0; i < iterations; ++i){
-        myGrayImage(resized, gray_image);
+        myGrayImage(resized, gray_image_my);
     }
     end = std::chrono::high_resolution_clock::now();
     
@@ -84,10 +97,10 @@ int main(int argc, char* argv[])
 
     std::cout << "myGrayImage Average time per call: " << avg_execution_time << " microseconds\n";
 
-    myGrayImageOpt(resized, gray_image);
+    myGrayImageOpt(resized, gray_image_my);
     start = std::chrono::high_resolution_clock::now();
     for (size_t i=0; i < iterations; ++i){
-        myGrayImageOpt(resized, gray_image);
+        myGrayImageOpt(resized, gray_image_my);
     }
     end = std::chrono::high_resolution_clock::now();
     
@@ -96,14 +109,17 @@ int main(int argc, char* argv[])
 
     std::cout << "myGrayImageOpt Average time per call: " << avg_execution_time << " microseconds\n";
 
-    launchGrayScaleConversion(resized.data, gray_image.data, resized.cols, resized.rows,
-                               resized.channels(), nullptr, nullptr);
+    std::cout << "step in the matrix: " << gray_image_gpu.step << std::endl;
+    launchGrayScaleConversion(resized.data, gray_image_gpu.data, resized.cols, resized.rows,
+                               resized.channels(), resized.step, gray_image_gpu.step,
+                               nullptr, nullptr);
 
     double totalKernelMs = 0.0, totalFullMs = 0.0;
     for (size_t i = 0; i < iterations; ++i) {
         float kernelMs = 0.0f, fullMs = 0.0f;
-        launchGrayScaleConversion(resized.data, gray_image.data, resized.cols, resized.rows,
-                                   resized.channels(), &kernelMs, &fullMs);
+        launchGrayScaleConversion(resized.data, gray_image_gpu.data, resized.cols, resized.rows,
+                                   resized.channels(), resized.step, gray_image_gpu.step,
+                                   &kernelMs, &fullMs);
         totalKernelMs += kernelMs;
         totalFullMs += fullMs;
     }
@@ -112,8 +128,12 @@ int main(int argc, char* argv[])
     std::cout << "CUDA total (incl. transfers) Average time per call: "
               << (totalFullMs / iterations) * 1000.0 << " microseconds\n";
 
+    // compare matrices
+    std::cout << "matrices [cv, my] max abs diff " << maxDiff(gray_image_cv, gray_image_my) << std::endl;
+    std::cout << "matrices [cv, gpu] max abs diff " << maxDiff(gray_image_cv, gray_image_gpu) << std::endl;
+    std::cout << "matrices [my, gpu] max abs diff " << maxDiff(gray_image_my, gray_image_gpu) << std::endl;
     // Finally some viz
-    cv::imshow("Image Viewer", gray_image);
+    cv::imshow("Image Viewer", gray_image_gpu);
 
     cv::waitKey(0);
 
