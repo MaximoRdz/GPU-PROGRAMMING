@@ -140,6 +140,16 @@ thread block in a thread block clustre can perform read/write/atomic operations 
 
 ### Heterogeneous Programming
 ![het-programming](https://docs.nvidia.com/cuda/archive/12.9.2/cuda-c-programming-guide/_images/heterogeneous-programming.png)
+The CUDA programming model assumes there are two separated physical devies: host and the device and that they maintain their own separate memory space in `DRAM`
+
+>`DRAM`: Dynamic random access memory, capacitor-based, needs refresh etc
+
+TBD: **unified memory programming**
+
+### Compute Capability
+this version number, often refered to as SM version, identifies the features supported by the GPU hardware. `<major-revision.minor-revision>`
+
+## Prgramming Interface
 
 # References
 

@@ -21,7 +21,7 @@ $(CU_OBJ): $(CU_SRC) grayscale_cuda.h
 	$(NVCC) $(NVCCFLAGS) -c $(CU_SRC) -o $(CU_OBJ)
 
 run:
-	./$(TARGET) assets/san-viecente-de-la-sonsierra.jpg
+	./$(TARGET) ../assets/san-vicente-de-la-sonsierra.jpg
 
 clean:
 	rm -f $(TARGET) $(CU_OBJ)
