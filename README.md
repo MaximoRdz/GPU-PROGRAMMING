@@ -132,6 +132,15 @@ So the hierarchy can be summarized as:
 
 **Grid → Thread Block Cluster → Thread Block → Thread → Warp**
 
+### Memory Hierarchy
+Each thread has private local memory. Each thread block has shared memory visible to all threads of the block and with the same lifetime as the block. each
+thread block in a thread block clustre can perform read/write/atomic operations on each other's shared memory. **all threads have access to the same global memory**
+
+**read only** spaces: two additional memory spaces accessible by all threads: *constant* and *texture* moemory spaces. They are optimized for different memory usages.
+
+### Heterogeneous Programming
+![het-programming](https://docs.nvidia.com/cuda/archive/12.9.2/cuda-c-programming-guide/_images/heterogeneous-programming.png)
+
 # References
 
 - https://docs.nvidia.com/cuda/cuda-programming-guide/
