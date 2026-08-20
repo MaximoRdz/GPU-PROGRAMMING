@@ -1,4 +1,4 @@
-/* shared memory optimization */
+/* constant-memory array for kernel repeated access optimization */
 #include <cuda_runtime.h>
 #include <cstdio>
 #include <cstdlib>
@@ -95,7 +95,7 @@ void LaunchGaussianSmoothing(const unsigned char* h_src, unsigned char* h_dst,
     /// c_kernel now lives in GPU constant memory
 
 
-    dim3 blockDim(16, 16); // 16 threads x 16 threads
+    dim3 blockDim(16, 16); // 256 blocks
     dim3 gridDim((ncols + blockDim.x - 1) / blockDim.x, 
             (nrows + blockDim.y - 1) / blockDim.y);
 

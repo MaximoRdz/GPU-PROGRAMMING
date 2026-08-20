@@ -44,6 +44,41 @@ Threads from the same block are accessing neigboring pixels (ideally from the sa
 kernel is small and read-only by all threads, ideal usecase for CUDA constant memory, currently is allocated in global memory `cudaMalloc`, the change is to
 create a CUDA constant-memory array `__constant__ float c_kernel[MAX_KERNEL_SIZE]`
 
+```text
+Experiment Sigma: 2 kernel-size: 13
+Avg. Duration CPU approach: 1579.83 microseconds / iteration
+Avg. Duration GPU approach: 4445.18 microseconds / iteration # slighly faster than the kernel float optimization
+```
+#### Shared Memory: Tiling
+Convolution is really overlapped heavy, for every pixel we load neighboring pixels (depending on kernel size), hence the same pixel gets loaded again and again
+from neighboring threads:
+```text
+kernel = [x x x x x x x]
+           ← radius 3 →
+
+Thread 0 needs: 0 1 2 3 4 5 6
+Thread 1 needs:   1 2 3 4 5 6 7
+Thread 2 needs:     2 3 4 5 6 7 8
+Thread 3 needs:       3 4 5 6 7 8 9
+```
+Assuming you've done your work and memory access is coalesced your block of threads need data from the same memory region. What we want now is, instead of having each thread
+independently fetching its neighbors from global memory, we load the whole region into **shared memory** just once for the whole grid-block.
+Conceptually: 
+```text
+pixel A
+  │        gets loaded once 
+  ▼
+shared memory
+  │
+  │               it is accessible by all threads in the block, reducing global-memory trafic
+  │
+  ├── thread 0
+  ├── thread 1
+  ├── thread 2
+  └── ...
+```
+
+
 ## Comments
 OpenCV gaussian is really optimized even for CPU, separable convolution, SIMD, cache friendly vertical axis convolution (most likely they
 transpose the image on the second pass), etc.

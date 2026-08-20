@@ -1,12 +1,10 @@
-/* shared memory optimization */
+/* orginal naive implementation but float precision kernel not double */
 #include <cuda_runtime.h>
 #include <cstdio>
 #include <cstdlib>
 
 #include "blur_cpu.hpp"
 #include "blur_cuda.hpp"
-
-#define MAX_KERNEL_SIZE 64
 
 #define CUDA_CHECK(call)       \
 do {       \
@@ -19,10 +17,8 @@ do {       \
 } while (0)       \
 
 
-__constant__ float c_kernel[MAX_KERNEL_SIZE];
-
 __global__ void Convolve1DHorizontalKernel(const unsigned char* d_src, unsigned char* d_dst,
-        int ncols, int nrows, size_t kernel_size,
+        int ncols, int nrows, float* d_kernel, size_t kernel_size,
         int kernel_radius)
 {
     int col = blockIdx.x * blockDim.x + threadIdx.x;
@@ -38,7 +34,7 @@ __global__ void Convolve1DHorizontalKernel(const unsigned char* d_src, unsigned 
 
             if (!(target_col >= 0 && target_col < ncols)) continue;
 
-            accumulator += c_kernel[k] * d_src[row * ncols + target_col];
+            accumulator += d_kernel[k] * d_src[row * ncols + target_col];
         }
 
     d_dst[row * ncols + col] = accumulator;
@@ -46,7 +42,7 @@ __global__ void Convolve1DHorizontalKernel(const unsigned char* d_src, unsigned 
 }
 
 __global__ void Convolve1DVerticalKernel(const unsigned char* d_src, unsigned char* d_dst,
-        int ncols, int nrows, size_t kernel_size,
+        int ncols, int nrows, float* d_kernel, size_t kernel_size,
         int kernel_radius)
 {
     int col = blockIdx.x * blockDim.x + threadIdx.x;
@@ -62,7 +58,7 @@ __global__ void Convolve1DVerticalKernel(const unsigned char* d_src, unsigned ch
 
             if (!(target_row >= 0 && target_row < nrows)) continue;
 
-            accumulator += c_kernel[k] * d_src[target_row * ncols + col];
+            accumulator += d_kernel[k] * d_src[target_row * ncols + col];
         }
 
     d_dst[row * ncols + col] = accumulator;
@@ -87,24 +83,23 @@ void LaunchGaussianSmoothing(const unsigned char* h_src, unsigned char* h_dst,
             cudaMemcpy(d_src, h_src, array_size, cudaMemcpyHostToDevice)
             );
 
-
+    float* d_kernel = nullptr;
+    CUDA_CHECK(cudaMalloc(&d_kernel, kernel_size * sizeof(float)));
     CUDA_CHECK(
-            cudaMemcpyToSymbol(c_kernel, h_kernel, kernel_size * sizeof(float))
+            cudaMemcpy(d_kernel, h_kernel, kernel_size * sizeof(float), cudaMemcpyHostToDevice)
             );
-    
-    /// c_kernel now lives in GPU constant memory
 
 
-    dim3 blockDim(16, 16); // 16 threads x 16 threads
+    dim3 blockDim(16, 16); // 256 blocks
     dim3 gridDim((ncols + blockDim.x - 1) / blockDim.x, 
             (nrows + blockDim.y - 1) / blockDim.y);
 
-    Convolve1DHorizontalKernel<<<gridDim, blockDim>>>(d_src, d_buffer, ncols, nrows, kernel_size,
+    Convolve1DHorizontalKernel<<<gridDim, blockDim>>>(d_src, d_buffer, ncols, nrows, d_kernel, kernel_size,
             kernel_radius);
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
 
-    Convolve1DVerticalKernel<<<gridDim, blockDim>>>(d_buffer, d_dst, ncols, nrows, kernel_size,
+    Convolve1DVerticalKernel<<<gridDim, blockDim>>>(d_buffer, d_dst, ncols, nrows, d_kernel, kernel_size,
             kernel_radius);
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
@@ -116,4 +111,5 @@ void LaunchGaussianSmoothing(const unsigned char* h_src, unsigned char* h_dst,
     CUDA_CHECK(cudaFree(d_src));
     CUDA_CHECK(cudaFree(d_dst));
     CUDA_CHECK(cudaFree(d_buffer));
+    CUDA_CHECK(cudaFree(d_kernel));
 }
