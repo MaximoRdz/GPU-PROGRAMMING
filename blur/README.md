@@ -5,6 +5,7 @@ $$G(x, y) = G(x) \cdot G(y) = \frac{1}{2\pi\sigma^2}\exp{-\frac{x^2 + y^2}{2\sig
 Each pixel's new value is set to a weighted average of the neigboring pixels (weigthed by the Gaussian distribution)
 
 ![Gaussian](../assets/gaussian-blur.png)
+![Results](../assets/benchmark_sigma.png)
 
 ## Implementation
 Gaussian filter is **separable** meaning that it can be computed as a sequence of operations first in one dimension and then 
