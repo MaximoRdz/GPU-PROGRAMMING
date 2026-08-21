@@ -13,7 +13,7 @@ TARGET = image_viewer
 
 CPP_SRC := $(wildcard *.cpp)
 C_SRC   := $(wildcard *.c)
-CU_SRC  := blur_cuda.cu
+CU_SRC  := blur_cuda.cu blur_cuda_fast.cu
 
 CPP_OBJ := $(CPP_SRC:.cpp=.o)
 C_OBJ   := $(C_SRC:.c=.o)

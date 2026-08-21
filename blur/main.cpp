@@ -7,6 +7,7 @@
 
 #include "blur_cpu.hpp"
 #include "blur_cuda.hpp"
+#include "blur_cuda_fast.hpp"
 #include "example.hpp"
 
 #include "opencv2/highgui.hpp"
@@ -28,8 +29,8 @@ int main(int argc, char* argv[])
     cv::cvtColor(raw, raw, cv::COLOR_BGR2GRAY);
 
 
-    const size_t iterations = 1000;
-    const double sigma = 2.0;
+    const size_t iterations = 100;
+    const double sigma = 10.0;
     const size_t kernel_size = KernelSizeForSigma(sigma);
     std::vector<double> kernel(kernel_size);
     ComputeGaussianKernel1D(kernel.data(), kernel_size, sigma);
@@ -79,6 +80,7 @@ int main(int argc, char* argv[])
     start = TickNow();
     LaunchGaussianSmoothing(raw.data, blurred.data, raw.cols, raw.rows, kernel_f.data(), kernel_size);
     end = TickNow();
+    avg_duration_microseconds = DurationMicroseconds(start, end);
     std::cout << "\tSingle warmup iteration in GPU: " << avg_duration_microseconds 
         << " microseconds" << std::endl;
 
@@ -86,6 +88,31 @@ int main(int argc, char* argv[])
     start = TickNow();
     for (size_t i = 0; i < iterations; ++i){
         LaunchGaussianSmoothing(raw.data, blurred.data, raw.cols, raw.rows, kernel_f.data(), kernel_size);
+    }
+    end = TickNow();
+
+    avg_duration_microseconds = DurationMicroseconds(start, end) / 
+        static_cast<double>(iterations);
+
+    std::cout << "Avg. Duration GPU approach: " << avg_duration_microseconds 
+        << " microseconds / iteration"<< std::endl;
+
+    /// GPU Implementation All tricks
+
+    // warmup
+    start = TickNow();
+    LaunchGaussianSmoothingFast(raw.data, blurred.data, raw.cols, raw.rows, kernel_f.data(), kernel_size);
+    end = TickNow();
+
+    avg_duration_microseconds = DurationMicroseconds(start, end);
+
+    std::cout << "\tSingle warmup iteration in GPU: " << avg_duration_microseconds 
+        << " microseconds" << std::endl;
+
+
+    start = TickNow();
+    for (size_t i = 0; i < iterations; ++i){
+        LaunchGaussianSmoothingFast(raw.data, blurred.data, raw.cols, raw.rows, kernel_f.data(), kernel_size);
     }
     end = TickNow();
 

@@ -111,8 +111,37 @@ Avg. Duration GPU approach: 1245.86 microseconds / iteration
 Slightly better than before but for row major accesses like in horizontal convolution there is not really that much benefit, let's see for the vertical.
 
 * **vertical convolution shared memory per block of threads**:
+```text
+Experiment Sigma: 2 kernel-size: 13
+Avg. Duration CPU approach: 1544.77 microseconds / iteration
+	Single warmup iteration in GPU: 1544.77 microseconds
+Avg. Duration GPU approach: 1406.55 microseconds / iteration
+```
+> This is worst performace!!
 
+* **Why Shared-Memory Tiling Slowed Down the Vertical Kernel**
 
+Tiling the vertical convolution added overhead without removing a bottleneck that existed.
+
+**The reads were already coalesced.** Within a warp, `threadIdx.x` varies while
+`target_row` stays fixed, so `d_src[target_row * ncols + col]` is a contiguous,
+coalesced access — the same as the horizontal kernel. The stride-`ncols` jump only
+happens *across* kernel taps for a single thread, never across threads in a warp.
+The "vertical access is non-coalesced" assumption didn't hold at the hardware level.
+
+**Cache was already catching the redundancy.** Neighboring threads along `y` read
+overlapping rows, but L1/L2 typically absorbs this short-range reuse automatically.
+Shared memory just moved that job from hardware to explicit code, at a cost.
+
+**Costs added without a matching benefit:**
+- An extra `__syncthreads()` barrier every block.
+- More shared memory per block, reducing resident blocks/SM and thus warps
+  available to hide memory latency.
+- Extra store instructions for main + halo loads.
+- Warp divergence in the halo-loading loop when `kernel_radius < blockDim.y`.
+
+**Takeaway:** shared-memory tiling pays off when the access pattern itself is bad
+(true strided/uncoalesced reads, or reuse windows too large for L1). 
 
 ## Comments
 OpenCV gaussian is really optimized even for CPU, separable convolution, SIMD, cache friendly vertical axis convolution (most likely they

@@ -5,7 +5,7 @@
 
 #include "blur_cuda.hpp"
 
-#define MAX_KERNEL_SIZE 64
+#define MAX_KERNEL_SIZE 512
 
 #define CUDA_CHECK(call)       \
 do {       \
@@ -20,7 +20,8 @@ do {       \
 
 __constant__ float c_kernel[MAX_KERNEL_SIZE];
 
-extern __shared__ unsigned char tile[];
+extern __shared__ unsigned char tile_horizontal[];
+extern __shared__ unsigned char tile_vertical[];
 
 __global__ void Convolve1DHorizontalKernel(const unsigned char* d_src, unsigned char* d_dst,
         int ncols, int nrows, size_t kernel_size,
@@ -37,7 +38,7 @@ __global__ void Convolve1DHorizontalKernel(const unsigned char* d_src, unsigned 
     // main pixel value 
     if (col < ncols && row < nrows) {
         // (first tile pixel we do plus kernel_radius to offset away from the halo)
-        tile[block_row_offset + threadIdx.x + kernel_radius] = d_src[row * ncols + col];
+        tile_horizontal[block_row_offset + threadIdx.x + kernel_radius] = d_src[row * ncols + col];
     }
     // halo loading 
     // strided: correct for kernel_radius > blockDim.x which might happen for large sigmas
@@ -45,13 +46,13 @@ __global__ void Convolve1DHorizontalKernel(const unsigned char* d_src, unsigned 
         for (int i = threadIdx.x; i < kernel_radius; i += blockDim.x) {
             // left halo: [0, kernel_radius)
             const int left_col = block_col_start - kernel_radius + i;
-            tile[block_row_offset + i] = 
+            tile_horizontal[block_row_offset + i] = 
                 (left_col >= 0) ? d_src[row * ncols + left_col] : 0;
                 // if desired mirror edges, periodic, etc. could be implemented here
 
             // right halo: [blockDim.x + kernel_radius, blockDim.x + 2*kernel_radius)
             const int right_col = block_col_start + blockDim.x + i;
-            tile[block_row_offset + blockDim.x + kernel_radius + i] = 
+            tile_horizontal[block_row_offset + blockDim.x + kernel_radius + i] = 
                 (right_col < ncols) ? d_src[row * ncols + right_col] : 0;
         }
     }
@@ -66,7 +67,7 @@ __global__ void Convolve1DHorizontalKernel(const unsigned char* d_src, unsigned 
             const int offset = k - kernel_radius;
             const int target_col = threadIdx.x + kernel_radius + offset;
 
-            accumulator += c_kernel[k] * tile[block_row_offset + target_col];
+            accumulator += c_kernel[k] * tile_horizontal[block_row_offset + target_col];
         }
 
     d_dst[row * ncols + col] = accumulator;
@@ -77,20 +78,45 @@ __global__ void Convolve1DVerticalKernel(const unsigned char* d_src, unsigned ch
         int ncols, int nrows, size_t kernel_size,
         int kernel_radius)
 {
+    /// cooperative loading into shared memory
     int col = blockIdx.x * blockDim.x + threadIdx.x;
     int row = blockIdx.y * blockDim.y + threadIdx.y;
 
+    /* const int tile_height = blockDim.y + 2 * kernel_radius; */
+    const int tile_width = blockDim.x;
+    const int block_row_start = blockIdx.y * blockDim.y;
+
+    // main pixel value
     if (col < ncols && row < nrows) {
-        int offset, target_row;
+        tile_vertical[(threadIdx.y + kernel_radius) * tile_width + threadIdx.x] = 
+            d_src[row * ncols + col];
+    }
+    // halo loading
+    if (col < ncols) {
+        // strided kernel_radius > blockdim.y (might happen)
+        for (int i = threadIdx.y; i < kernel_radius; i += blockDim.y) {
+            // upper halo [0, kernel_radius)
+            const int upper_row = block_row_start - kernel_radius + i;
+            tile_vertical[i * tile_width + threadIdx.x] = 
+                (upper_row >= 0) ? d_src[upper_row * ncols + col] : 0;
+
+            const int bottom_row = block_row_start + blockDim.y + i;
+            tile_vertical[(blockDim.y + kernel_radius + i) * tile_width + threadIdx.x] = 
+                (bottom_row < nrows) ? d_src[bottom_row * ncols + col] : 0;
+        }
+    }
+
+    __syncthreads();
+
+    if (col < ncols && row < nrows) {
         float accumulator = 0.0;
 
         for (int k = 0; k < kernel_size; ++k){
-            offset = k - kernel_radius;
-            target_row = row + offset;
+            /* const int offset = k - kernel_radius; */
+            const int target_row = threadIdx.y + k;
 
-            if (!(target_row >= 0 && target_row < nrows)) continue;
-
-            accumulator += c_kernel[k] * d_src[target_row * ncols + col];
+            accumulator += 
+                c_kernel[k] * tile_vertical[target_row * tile_width + threadIdx.x];
         }
 
     d_dst[row * ncols + col] = accumulator;
@@ -125,23 +151,29 @@ void LaunchGaussianSmoothing(const unsigned char* h_src, unsigned char* h_dst,
     dim3 blockDim(16, 16); // 16 threads x 16 threads
 
     // shared memory:
-    size_t shared_bytes = blockDim.y * (blockDim.x + 2 * kernel_radius) * sizeof(unsigned char);
+    size_t shared_bytes_horizontal =
+        blockDim.y * (blockDim.x + 2 * kernel_radius) * sizeof(unsigned char);
+    size_t shared_bytes_vertical = 
+        (blockDim.y + 2 * kernel_radius) * blockDim.x * sizeof(unsigned char);
 
     dim3 gridDim((ncols + blockDim.x - 1) / blockDim.x, 
             (nrows + blockDim.y - 1) / blockDim.y);
 
-
     Convolve1DHorizontalKernel<<<
         gridDim, 
         blockDim,
-        shared_bytes        // each block gets its own shared memory tile+halo array
+        shared_bytes_horizontal        // each block gets its own shared memory tile+halo array
     >>>(d_src, d_buffer, ncols, nrows, kernel_size, kernel_radius);
 
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
 
-    Convolve1DVerticalKernel<<<gridDim, blockDim>>>(d_buffer, d_dst, ncols, nrows, kernel_size,
-            kernel_radius);
+    Convolve1DVerticalKernel<<<
+        gridDim,
+        blockDim,
+        shared_bytes_vertical
+    >>>(d_buffer, d_dst, ncols, nrows, kernel_size, kernel_radius);
+
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
 
