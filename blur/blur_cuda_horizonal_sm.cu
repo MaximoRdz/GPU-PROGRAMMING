@@ -1,4 +1,4 @@
-/* shared memory optimization: both vertical and horizontal kernels.*/
+/* shared memory optimization */
 #include <cuda_runtime.h>
 #include <cstdio>
 #include <cstdlib>

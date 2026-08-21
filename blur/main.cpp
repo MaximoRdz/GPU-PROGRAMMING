@@ -28,7 +28,7 @@ int main(int argc, char* argv[])
     cv::cvtColor(raw, raw, cv::COLOR_BGR2GRAY);
 
 
-    const size_t iterations = 100;
+    const size_t iterations = 1000;
     const double sigma = 2.0;
     const size_t kernel_size = KernelSizeForSigma(sigma);
     std::vector<double> kernel(kernel_size);
@@ -56,6 +56,10 @@ int main(int argc, char* argv[])
     /*     << " microseconds / iteration"<< std::endl; */
     
     /// CPU OpenCV Implementation
+    
+    // warmup
+    cv::GaussianBlur(raw, blurred, cv::Size(kernel_size, kernel_size), 0, 0);
+
     start = TickNow();
     for (size_t i = 0; i < iterations; ++i){
         cv::GaussianBlur(raw, blurred, cv::Size(kernel_size, kernel_size), 0, 0);
@@ -70,6 +74,15 @@ int main(int argc, char* argv[])
 
     /// GPU Implementation
     std::vector<float> kernel_f(kernel.begin(), kernel.end());
+
+    // warmup
+    start = TickNow();
+    LaunchGaussianSmoothing(raw.data, blurred.data, raw.cols, raw.rows, kernel_f.data(), kernel_size);
+    end = TickNow();
+    std::cout << "\tSingle warmup iteration in GPU: " << avg_duration_microseconds 
+        << " microseconds" << std::endl;
+
+
     start = TickNow();
     for (size_t i = 0; i < iterations; ++i){
         LaunchGaussianSmoothing(raw.data, blurred.data, raw.cols, raw.rows, kernel_f.data(), kernel_size);

@@ -49,6 +49,15 @@ Experiment Sigma: 2 kernel-size: 13
 Avg. Duration CPU approach: 1579.83 microseconds / iteration
 Avg. Duration GPU approach: 4445.18 microseconds / iteration # slighly faster than the kernel float optimization
 ```
+#### Warm up round
+```text
+Avg. Duration CPU approach: 1533.38 microseconds / iteration
+	Single warmup iteration in GPU: 1533.38 microseconds
+Avg. Duration GPU approach: 1398.52 microseconds / iteration
+```
+Already better than the CPU optimized OpenCV! Warm up phase includes time wasted in: JIT (just in time compilation), overall memory layout configuration that is reused in subsequent
+calls, (TODO: be more exhaustive in this explanation).
+
 #### Shared Memory: Tiling
 Convolution is really overlapped heavy, for every pixel we load neighboring pixels (depending on kernel size), hence the same pixel gets loaded again and again
 from neighboring threads:
@@ -77,6 +86,32 @@ shared memory
   ├── thread 2
   └── ...
 ```
+##### Tile + Halo
+For a kernel radius of $R=3$:
+```text
+                               output pixels
+                      ↓ ↓ ↓ ↓ ↓ ↓ ↓ ↓ ↓ ↓ ↓ ↓ ↓ ↓ ↓ ↓
+Global:     [ H H H | T T T T T T T T T T T T T T T T | H H H ]
+                     ↑                              ↑
+                     └────── 16 outputs ────────────┘
+
+H = halo
+T = tile
+```
+The shared memory is on-chip (SRAM) much much faster than the VRAM and than the system DDR RAM accessed via PCle bus when dedicated VRAM is exhausted.
+- not only extreme low latency it also has larger bandwitdh with the only cost of using `__syncthreads()`to avoid race conditions.-
+
+* **horizontal convolution shared memory per block of threads**:
+```text
+Experiment Sigma: 2 kernel-size: 13
+Avg. Duration CPU approach: 1535.01 microseconds / iteration
+	Single warmup iteration in GPU: 1535.01 microseconds
+Avg. Duration GPU approach: 1245.86 microseconds / iteration
+```
+Slightly better than before but for row major accesses like in horizontal convolution there is not really that much benefit, let's see for the vertical.
+
+* **vertical convolution shared memory per block of threads**:
+
 
 
 ## Comments
@@ -99,6 +134,14 @@ Btw: we can optimize even further just by moving to using kernel in float and no
 | Neighborhood/tile | many threads reuse same pixels     | Shared memory       |
 | Output            | each thread writes one pixel       | Global memory       |
 
+- just by having a warmup round the GPU approach improves sustancially (TODO: explain why)
+
+## Profiling
+local or over ssh forwarded connection `ssh -X ...`
+```bash
+sudo ncu -o blur_profile ./image_viewer ../assets/san-vicente-de-la-sonsierra.jpg 
+ncu-ui blur_profile.ncu-rep 
+```
 
 # References
 - https://en.wikipedia.org/wiki/Gaussian_blur

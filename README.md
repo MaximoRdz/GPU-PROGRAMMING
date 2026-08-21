@@ -150,6 +150,35 @@ TBD: **unified memory programming**
 this version number, often refered to as SM version, identifies the features supported by the GPU hardware. `<major-revision.minor-revision>`
 
 ## Prgramming Interface
+CUDA C++ provides an API similar to the C++ prgramming language to execute programs on the device. Consisting of a minimal set of extensions of the C++ language and a
+runtime library. Any file containing these extensions must be compiled with **NVCC** (I mean you could also write directly on PTX (parallel thread execution language, assembly analogous for NVIDIA devices but anyways you need to compile it to machine code)). 
+
+Cuda runtime provides C and C++ functions that execute on the host to allocate and deallocate device memory, transfer dtaa between host memory and device memory, etc.
+
+### Compilation workflow
+nvcc compiles code first by separating code that'll execute on the host from that code that will execute in the device, then compiling to PTX and binary and, of course, replacing the host code `<<<...>>>` aparatus by the appropriate cuda runtime functions to load and launch kernels.
+
+PTX code is JIT (just in time) compiled by the device using that code (benefiting from potential better device drivers in the new devices), the device caches a copy of the generated binary code
+after the first compilation to avoid repeatition (this will only be regenereated if the driver of the device is updated.)
+
+> Note that a binary compiled from an earlier PTX version may not
+> make use of some hardware features. For example, a binary targeting devices of compute capability
+> 7.0 (Volta) compiled from PTX generated for compute capability 6.0 (Pascal) will not make use of Tensor
+> Core instructions, since these were not available on Pascal. As a result, the final binary may perform
+> worse than would be possible if the binary were generated using the latest version of PTX.
+
+### Comatibility
+- C++ is fully supported in host functions but in device ONLY a subset of it is fully supported
+- 64-bit: device code compoiled in 64 bit mode is only supported with host code compiled in 64 bit mode
+
+### CUDA runtime
+
+
+
+
+
+
+
 
 # References
 
