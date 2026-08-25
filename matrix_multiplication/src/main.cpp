@@ -1,57 +1,43 @@
-#include <cmath>
-#include <cstddef>
 #include <iostream>
-#include <vector>
+#include <string>
 
-#include <opencv2/opencv.hpp>
-
-#include "../include/matmul.hpp"
+#include "../include/benchmarks.hpp"
 
 
-void PrintSquareMatrix(std::vector<float>& mat)
+void PrintUsage(const char* program)
 {
-    const size_t N = static_cast<size_t>(sqrtf(mat.size()));
-
-    std::cout << "[\n";
-    for (size_t i = 0; i < N; ++i) {
-        std::cout << "\t";
-        for (size_t j = 0; j < N; ++j) {
-            std::cout << mat[i * N + j];
-            if (j == N - 1) {
-                std::cout << "\n";
-            } else {
-                std::cout << ", ";
-            }
-        }
-    }
-    std::cout << "]\n";
+    std::cout
+        << "Usage:\n"
+        << "  " << program << "              Run default test\n"
+        << "  " << program << " basic       Run basic matmul benchmark\n"
+        << "  " << program << " datatypes   Benchmark data types\n"
+        << "  " << program << " help        Show this message\n";
 }
 
-int main(void)
+
+int main(int argc, char* argv[])
 {
-    std::vector<float> mat1 = {
-        1, 2, 3,
-        4, 5, 6, 
-        7, 8, 9
-    };
+    if (argc == 1) {
+        RunBasicMatmul();
+        return 0;
+    }
 
-    std::vector<float> dst(mat1.size());
+    const std::string command = argv[1];
 
-    SquareMatMul(mat1, mat1, dst);
-
-    std::cout << "Matrix multiplication finished!\n";
-
-    PrintSquareMatrix(mat1);
-    std::cout << "\tX\n";
-    PrintSquareMatrix(mat1);
-    std::cout << "\t=\n";
-    PrintSquareMatrix(dst);
-    
-    cv::Mat A(3, 3, CV_32F, mat1.data());
-    cv::Mat cvDst = A * A;
-
-    std::cout << "\nOpenCV matrix multiplication:\n";
-    std::cout << cvDst << '\n';
+    if (command == "basic") {
+        RunBasicMatmul();
+    }
+    else if (command == "datatypes") {
+        RunDatatypeBenchmark();
+    }
+    else if (command == "help" || command == "--help" || command == "-h") {
+        PrintUsage(argv[0]);
+    }
+    else {
+        std::cerr << "Unknown command: " << command << "\n\n";
+        PrintUsage(argv[0]);
+        return 1;
+    }
 
     return 0;
 }

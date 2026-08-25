@@ -12,37 +12,43 @@ CXXFLAGS := -Wall -Wextra -std=c++17 -O2 \
             -MMD -MP
 
 NVCCFLAGS := -std=c++17 -O2 \
-             -Iinclude
+             -Iinclude \
+             -MMD -MP
 
 LDFLAGS := -L$(CUDA_LIB_DIR)
 
 LDLIBS := $(shell pkg-config --libs opencv4) -lcudart
 
-CPP_SRC := $(wildcard src/*.cpp)
-CU_SRC  := $(wildcard src/*.cu)
 
-CPP_OBJ := $(patsubst src/%.cpp,build/%.o,$(CPP_SRC))
-CU_OBJ  := $(patsubst src/%.cu,build/%.o,$(CU_SRC))
+CPP_SRC := $(wildcard src/*.cpp) \
+           $(wildcard benchmarks/*.cpp)
+
+CU_SRC := $(wildcard src/*.cu) \
+          $(wildcard benchmarks/*.cu)
+
+CPP_OBJ := $(CPP_SRC:%.cpp=build/cpp/%.o)
+CU_OBJ  := $(CU_SRC:%.cu=build/cuda/%.o)
 
 OBJ := $(CPP_OBJ) $(CU_OBJ)
 DEP := $(OBJ:.o=.d)
 
 
 $(TARGET): $(OBJ)
-	$(NVCC) $(OBJ) -o $@ $(LDFLAGS) $(LDLIBS)
+	$(NVCC) $^ -o $@ $(LDFLAGS) $(LDLIBS)
 
 
-build/%.o: src/%.cpp
+build/cpp/%.o: %.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 
-build/%.o: src/%.cu
+build/cuda/%.o: %.cu
 	@mkdir -p $(@D)
-	$(NVCC) $(NVCCFLAGS) -MMD -MP -c $< -o $@
+	$(NVCC) $(NVCCFLAGS) -c $< -o $@
 
 
 run: $(TARGET)
+	./$(TARGET)
 
 
 clean:
