@@ -17,7 +17,7 @@ The following figures show how the end-to-end latency is fixed and stable for ma
 
 <img src="./results/DatatypeBenchmark_gpu.png" width="850">
 
-Fastest datatypes? `int16` 
+Fastest datatypes? `int16` in the compute bound regime and `int8` in the memory-overhead regime (make sense). IN the compute-bound regime, the most interesting, `int16` is followed by `int8`, `float32` and `int32`.
 | Size    |     16 |     32 |     64 |    128 |    256 |     512 |    1024 |
 | ------- | -----: | -----: | -----: | -----: | -----: | ------: | ------: |
 | float32 | 173.97 | 172.19 | 175.61 | 195.93 | 267.76 |  960.47 | 5245.05 |
@@ -27,6 +27,10 @@ Fastest datatypes? `int16`
 | int64   | 169.61 | 172.52 | 179.75 | 201.63 | 351.36 | 1730.39 | 10676.1 |
 | int8    | 170.25 | **170.51** | **175.26** | **185.01** | 279.51 |  845.56 | 5077.68 |
 
+### GPU only i16, fp16 and bf16
+
+<img src=".results/GPUi16fp16bf16Benchmark.png" width=850>
+<img src=".results/GPUi16fp16bf16Benchmark_linear.png" width=850>
 
 ## Tensor Cores and Matrix Multiplication
 
