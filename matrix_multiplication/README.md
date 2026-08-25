@@ -29,8 +29,8 @@ Fastest datatypes? `int16` in the compute bound regime and `int8` in the memory-
 
 ### GPU only i16, fp16 and bf16
 
-<img src=".results/GPUi16fp16bf16Benchmark.png" width=850>
-<img src=".results/GPUi16fp16bf16Benchmark_linear.png" width=850>
+<img src="./results/GPUi16fp16bf16Benchmark.png" width=850>
+<img src="./results/GPUi16fp16bf16Benchmark_linear.png" width=850>
 
 ## Tensor Cores and Matrix Multiplication
 
