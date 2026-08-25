@@ -7,9 +7,9 @@ multiplication of matrices `a` and `b`row and col elements (as given by the eqn)
 
 ## Naive implementation
 
-<img src="./results/DatatypeBenchmark.png" width="700">
+<img src="./results/DatatypeBenchmark.png" width="850">
 
-<img src="./results/DatatypeBenchmark_gpu.png" width="700">
+<img src="./results/DatatypeBenchmark_gpu.png" width="850">
 
 ## Tensor Cores and Matrix Multiplication
 
