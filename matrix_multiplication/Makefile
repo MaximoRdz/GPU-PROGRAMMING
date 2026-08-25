@@ -8,6 +8,7 @@ CUDA_LIB_DIR := $(CUDA_PATH)/lib64
 
 CXXFLAGS := -Wall -Wextra -std=c++17 -O2 \
             -Iinclude \
+			-I$(CUDA_PATH)/include \
             $(shell pkg-config --cflags opencv4) \
             -MMD -MP
 

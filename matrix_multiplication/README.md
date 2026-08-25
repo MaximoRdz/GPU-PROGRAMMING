@@ -28,11 +28,23 @@ Fastest datatypes? `int16` in the compute bound regime and `int8` in the memory-
 | int8    | 170.25 | **170.51** | **175.26** | **185.01** | 279.51 |  845.56 | 5077.68 |
 
 ### GPU only i16, fp16 and bf16
+Currently, three of the most important datatypes in machine learning. `bf16` introduces some overhead over the other types. This has to do with the number fundamental definition:
+- fp16: one sign bit, five exponent bits and ten mantissa bits (represents numbers with roughly three to four decimal precision)
+- bf16: one sign bit, eight exponent bits and seven mantissa bits (represents a wider range of numbers but decimal precision gets
+reduced to two to three digits)
 
-<img src="./results/GPUi16fp16bf16Benchmark.png" width=850>
-<img src="./results/GPUi16fp16bf16Benchmark_linear.png" width=850>
+It is clear that `bf16` sacrifices precision for broader exponent range.
+
+In this experiment we see similar performance, but architecture favours fp16
+
+
+<p float="left">
+    <img src="./results/GPUi16fp16bf16Benchmark.png" width="49%">
+    <img src="./results/GPUi16fp16bf16Benchmark_linear.png" width="49%">
+</p>
 
 ## Tensor Cores and Matrix Multiplication
+- https://leimao.github.io/blog/NVIDIA-Tensor-Core-Programming/
 
 ## Misc.
 - **lambda function in c++**

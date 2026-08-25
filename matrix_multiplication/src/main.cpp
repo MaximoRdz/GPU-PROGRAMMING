@@ -11,6 +11,7 @@ void PrintUsage(const char* program)
         << "  " << program << "              Run default test\n"
         << "  " << program << " basic       Run basic matmul benchmark\n"
         << "  " << program << " datatypes   Benchmark data types\n"
+        << "  " << program << " 16   Benchmark integer and float '16' data types on GPU only\n"
         << "  " << program << " help        Show this message\n";
 }
 
@@ -29,6 +30,9 @@ int main(int argc, char* argv[])
     }
     else if (command == "datatypes") {
         RunDatatypeBenchmark();
+    }
+    else if (command == "16") {
+        Runi16fp16bf16Benchmark();
     }
     else if (command == "help" || command == "--help" || command == "-h") {
         PrintUsage(argv[0]);
