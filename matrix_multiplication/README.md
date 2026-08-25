@@ -7,8 +7,10 @@ multiplication of matrices `a` and `b`row and col elements (as given by the eqn)
 
 ## Naive implementation
 
-![cpu-gpu](./results/DatatypeBenchmark.png)
-![gpu](./results/DatatypeBenchmark_gpu.png)
+<p float="left">
+  <img src="./results/DatatypeBenchmark.png" width="49%">
+  <img src="./results/DatatypeBenchmark_gpu.png" width="49%">
+</p>
 
 ## Tensor Cores and Matrix Multiplication
 
