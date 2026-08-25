@@ -13,18 +13,19 @@ threads when computing the multiplication) dominates and even having thounsand o
 <img src="./results/DatatypeBenchmark.png" width="850">
 
 ### GPU only
-The following figures show how the end-to-end latency is fixed and stable for matrix sizes up to 256$\times$256 and for all data types. What does this mean? The overhead of preparing the gpu and launching the kernel dominates the execution time, thus having more elements in this regime does not make a difference. It is only for matrices larger than 512$\times$512 where we start to see the exponential growth of the actual arithmetic work (due to having more elements) ,
+The following figures show how the end-to-end latency is fixed and stable for matrix sizes up to 256$\times$256 and for all data types. What does this mean? The overhead of preparing the gpu and launching the kernel dominates the execution time, thus having more elements in this regime does not make a difference. It is only for matrices larger than 512$\times$512 where we start to see the exponential growth of the actual arithmetic work (due to having more elements).
 
 <img src="./results/DatatypeBenchmark_gpu.png" width="850">
 
+Fastest datatypes? `int16` 
 | Size    |     16 |     32 |     64 |    128 |    256 |     512 |    1024 |
 | ------- | -----: | -----: | -----: | -----: | -----: | ------: | ------: |
 | float32 | 173.97 | 172.19 | 175.61 | 195.93 | 267.76 |  960.47 | 5245.05 |
 | float64 | 168.87 | 172.26 | 180.37 | 202.82 | 352.94 | 1734.14 | 10638.4 |
-| int16   | 168.59 |    171 | 180.14 | 188.72 | 221.55 |  546.78 | 3225.88 |
+| int16   | **168.59** |    171 | 180.14 | 188.72 | **221.55** |  **546.78** | **3225.88** |
 | int32   | 172.55 | 171.31 | 176.08 | 195.88 | 268.35 |  963.03 | 5234.65 |
 | int64   | 169.61 | 172.52 | 179.75 | 201.63 | 351.36 | 1730.39 | 10676.1 |
-| int8    | 170.25 | 170.51 | 175.26 | 185.01 | 279.51 |  845.56 | 5077.68 |
+| int8    | 170.25 | **170.51** | **175.26** | **185.01** | 279.51 |  845.56 | 5077.68 |
 
 
 ## Tensor Cores and Matrix Multiplication
