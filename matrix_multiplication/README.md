@@ -43,8 +43,63 @@ In this experiment we see similar performance, but architecture favours fp16
     <img src="./results/GPUi16fp16bf16Benchmark_linear.png" width="49%">
 </p>
 
+## Matrix Multiplication Optimization
+Accelerate the data traffic without affecting the number of math operations.
+
+### Math-bound vs Memory-bound Operations
+An operation performed on a piece of hardware can be either math- or memory-bound.
+* math bandwith: the rate at which math unit operation can be conducted by the processor `operations/second` (OPS) if we are working with float datatuype then the most common name is FLOPS (my nvidia dgx shows off $\approx$100 TFLOPS, i.e. $10^{12}$ FLOPS)
+* memory bandwidth: rate at which data can be read from or stored into a semiconductor memory by a processor `bytes / second`, again the nvidia dgx 273 GBytes/s 
+* data reuse: cache, smaller faster memory closer to the processor core, data reuse is just the idea of copy the data you are going to be using a lot to cache.
+
+Matrix multiplication requires $2*N^3$ math operations (addition and multiplication) in the naive approach. If we are using a data precision of `b` bits then the amoutn of data read is $2b*N^3$ let's say in the cache memory we can store a whole N$\times$N matrix a one array of $N$ elements, the we can reduce the amount of data reads to $N\times$N + N$\times$N (moving first marix to cache and the reading and moving array by array next matrix to cache) and for`b` bits $2bN^2$. in terms of
+writing to memory, just write the otuput matrix $bN^2$, so `data transfer`-wise there wil be $3bN^2$.
+
+#### definitions
+time it takes in terms of operations
+$$t_{math} = \frac{N_{op}}{BW_{math}}$$
+
+time it takes in temrs of memory operaitons
+$$t_{mem} = \frac{N_{byte}}{BW_{mem}}$$
+
+hence we can see which dominates the total time:
+- math-bound
+$$\frac{N_{op}}{N_{byte}} \gt \frac{BW_{math}}{BW_{mem}}$$
+
+- memory-bound
+$$\frac{N_{op}}{N_{byte}} \lt \frac{BW_{math}}{BW_{mem}}$$
+
+an using the right terminology $\frac{N_{op}}{N_{byte}}$ is referred to as the **arithmetic intensity**
+
+### Optimizing
+$N_{op}$ is usually a constant unless you know better algorithms, but we can try to minimize $N_{bytes}$ as much as possible by reusing data. If an operation is memory bound then the computer-system is under-utilized.
+- matrix multiplication case: for this case the arithmetic intensity becomes
+$$\frac{N_{op}}{N_{byte}} = \frac{2N^3}{2bN^3 / 8} = \frac{8}{b} \; \text{OP/byte}$$
+and in the case of data reuse (as described above)
+$$\frac{N_{op}}{N_{byte}} = \frac{2N^3}{3bN^2 / 8} = \frac{16N}{3b} \; \text{OP/byte}$$
+
+for my nvidia DGX spark: $\frac{BW_{math}}{BW_{mem}} = \frac{10^{12} FLOPS}{273 \cdot 10^9 B/s} = 3.663$ OP/byte arithmetic intensity, under this threshold the operation is considered memory bound. As this specifications of the dgx spark are for fp16 the $\frac{N_{op}}{N_{byte}} = \frac{16N}{3b} = \frac{N}{3} \; \text{OP/byte}$
+
+so if $N \lt 3 \cdot 3.663 \approx 10$ the multiplicatoin operation is memory bound
+
+
 ## Tensor Cores and Matrix Multiplication
 - https://leimao.github.io/blog/NVIDIA-Tensor-Core-Programming/
+- https://leimao.github.io/blog/CUDA-Matrix-Multiplication/
+- https://docs.nvidia.com/cuda/archive/11.6.1/cuda-c-best-practices-guide/index.html
+
+NVIDIA tensor cores: dedicated (hardware) accelerators for general matrix multiplication (GEMM). NVIDIA tensor cores are specialized 
+in performing the GEMM operations in mixed precision, i.e., GEMM inputs are in lower precision whereas GEMM outputs are in high precision.
+
+Currently, I'm working on a NVIDIA DGX Spark, grace blackwell architecture, which accounts for 48 SMs and each has 4 tensor cores, thus 192 tensor cores in total. Another example is the A100 with 108 SMs, also 4 TC / Sm and hence a total of 432 tensor cores.
+
+### Programming Tensor Cores
+TC are fully prgrammable at the warp level and the API can be access via `mma.h`(matrix multiplication and accumulation) and under the `nvcuda::wmma` namespace.
+We can program operations of the type:
+$$D = AB + C$$
+at the warp level (32 threads). Given a large input matrix, the full MMA operation can be divided into multiple small GEMMs by dividing the matrices into smaller 
+matrices and then collect the final result as follows:
+
 
 ## Misc.
 - **lambda function in c++**
@@ -56,4 +111,10 @@ In this experiment we see similar performance, but architecture favours fp16
 `[&]` allows the lambda function to access variables from the surrounding scope
 and use them, only by reference!
 # TODO
-- [ ] performance for different data types and floating point precisions.
+- [x] performance for different data types and floating point precisions.
+- [ ] optimize approach: math-bound vs compute-bound
+- [ ] optimize with share memory
+- [ ] optmize with tensor cores
+- [ ] compare against cuDNN or any oficial GEMM implementaiton
+- batched matrix multiplication
+
