@@ -8,6 +8,7 @@
 void RunBasicMatmul();
 void RunDatatypeBenchmark();
 void Runi16fp16bf16Benchmark();
+void RunTilingBenchmark();
 
 
 template <typename Func>

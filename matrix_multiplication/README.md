@@ -103,7 +103,7 @@ $$
 - **Memory-bound**
 
 $$
-\frac{N_{op}}{N_{byte}} < \frac{BW_{math}}{BW_{mem}}
+\frac{N_{op}}{N_{byte}} \lt \frac{BW_{math}}{BW_{mem}}
 $$
 
 Using the right terminology, `N_op/N_byte` is referred to as the **arithmetic intensity**.
@@ -132,7 +132,7 @@ $$
 
 Arithmetic intensity under this threshold means the operation is considered memory-bound.
 
-As these specifications of the DGX Spark are for `fp16`:
+As these specifications of the DGX Spark are for `fp16` (rn I'm not sure they managed to offuscate official grace balckwell datasheet for nvidia dgx...):
 
 $$
 \frac{N_{op}}{N_{byte}} = \frac{16N}{3b} = \frac{N}{3} \; \text{OP/byte}
@@ -141,10 +141,67 @@ $$
 So if:
 
 $$
-N < 3 \cdot 3.663 \approx 10
+N \lt 3 \cdot 3.663 \approx 10
 $$
 
 the multiplication operation is memory-bound.
+
+### Math-bound Matrix Multiplication
+In our work we usually deal either with Nvidia dgx spark or Nvidia A40 for each of them the arithmetic intensity given mixed precision bf16 and fp32 accumulate
+no data-reuse yet:
+$$
+\frac{N_{op}}{N_{byte}} = \frac{8}{b} = \frac{1}{4} \; \text{OP/byte}
+$$
+- [NVIDIA A40](https://images.nvidia.com/content/Solutions/data-center/a40/nvidia-a40-datasheet.pdf): $\frac{BW_{math}}{BW_{mem}} = \frac{149.7 \cdot 10^12 FLOPS}{696 \cdot 10^9 Bytes/s} = 215$
+- [NVIDIA DGX Spark](https://www.aspsys.com/wp-content/uploads/2025/05/nvidia-dgx-spark-datasheet.pdf): $\frac{BW_{math}}{BW_{mem}} = \frac{10^12 FLOPS}{273 \cdot 10^9 Bytes/s} = 10$
+
+In both cases the naive implementation is memory bound (0.25 less than the arithmetic instensity). We saw before that caching and data reuse was a great option but of course cache size is **limited** and GEMM is supposed to work for all matrix sizes. 
+> Idea: Cache both matrix A and B operands into cache via matrix multiplication decomposition
+
+#### Matrix Multiplication Decomposition
+- Number of operations remains the same: $2N^3$
+- But smaller matrices can be cached, being $d$ the size of the smaller matrix patch, $N_{bytes} = (N^3 / d^3) \cdot 2 \cdot b \cdot d^2$ again recall 2 because we read from the 2 operands, b bits size of the data type and $d^2$ the number of digits in the patch we read from cache, all that times the amount of patches we have divided our matrix into. $N_{bytes} = 2bN^3 / d$ for fp32: $N_{bytes} = 8N^3 /d$ 
+
+$$
+\frac{N_{op}}{N_{byte}} = \frac{d}{4} \; \text{OP/byte}
+$$
+
+aha! the math intensity can be increased in terms of d until you fill up your cache size!
+- nvidia a40: $d \gt 830$ to have it purely math bound
+- nvidia dgx spark: $d \gt 40$ to have it purely math bound
+
+### Implementation
+if the naive implementation is $c_{i, j} = \sum_{k=0}^{N} a_{i, k} * b_{k, j}$
+the cache friendly (tile based) matrix decomposition into d patches is just 
+$$
+c_{i, j} = \sum_{p=0}^{N/d} \( \sum_{k=0}^{d} a_{i, k} * b_{k, j} \)
+$$
+
+### Tiled (Shared-Memory) vs Naive GPU MatMul — BLOCK_DIM = 16
+<p float="left">
+    <img src="./results/tiling_blockdim16.png" width="49%">
+    <img src="./results/tiling_blockdim16_linear.png" width="49%">
+</p>
+
+| Metric              |      16 |      32 |      64 |     128 |     256 |     512 |    1024 |     2048 |      4096 |
+|----------------------|--------:|--------:|--------:|--------:|--------:|--------:|--------:|---------:|----------:|
+| int16 — naive        |  207.92 |  216.01 |  221.71 |  235.17 |  258.25 |  565.30 | 2980.73 | 20283.70 | 318068.00 |
+| int16 — tiled        | **172.64** | **171.46** | **172.64** | **179.70** | **202.44** | **342.11** | **1518.97** | **8961.23** | **82895.90** |
+| int16 — speedup (x)  |    1.20 |    1.26 |    1.28 |    1.31 |    1.28 |    1.65 |    1.96 |     2.26 |      3.84 |
+| half — naive         |  207.61 |  212.67 |  218.43 |  233.87 |  262.97 |  567.56 | 2985.75 | 20420.50 | 329044.00 |
+| half — tiled         | **173.65** | **172.46** | **172.39** | **179.41** | **202.17** | **336.45** | **1502.97** | **8903.70** | **82562.90** |
+| half — speedup (x)   |    1.20 |    1.23 |    1.27 |    1.30 |    1.30 |    1.69 |    1.99 |     2.29 |      3.99 |
+| bf16 — naive         |  212.48 |  214.63 |  220.40 |  236.38 |  297.74 |  684.56 | 3935.87 | 28373.50 | 374303.00 |
+| bf16 — tiled         | **175.82** | **172.40** | **174.19** | **185.91** | **235.55** | **571.56** | **3309.44** | **23329.50** | **179932.00** |
+| bf16 — speedup (x)   |    1.21 |    1.24 |    1.26 |    1.27 |    1.26 |    1.20 |    1.19 |     1.22 |      2.08 |
+
+- Speedup = naive_latency / tiled_latency. Values > 1.0 mean the tiled kernel is faster.
+- Tiled kernel wins at every size and datatype tested; the margin grows sharply once matrices exceed 512 (memory-bound naive kernel suffers far more from repeated global loads as N grows).
+- int16 and half track each other closely at every size (same element width, similar coalescing behavior) — speedup curves are almost identical.
+- bf16 tracks int16/half closely up to size 256, then diverges: from 512 onward its speedup shrinks (1.20x -> 1.19x at 512/1024) before recovering to 2.08x at 4096. This suggests bf16 arithmetic/conversion overhead (or MMA path differences) dominates over the shared-memory reuse benefit in that mid-range, unlike int16/half where the tiled kernel's advantage keeps compounding with size.
+- Largest win: int16 and half at size 4096, ~3.8-4.0x faster tiled vs naive.
+- Smallest win: bf16 at size 1024, only ~1.19x — worth investigating whether the bf16 path is bottlenecked elsewhere (e.g. conversion cost, bank conflicts, or occupancy) rather than benefiting fully from the tiling optimization at that size.
+
 
 ## Tensor Cores and Matrix Multiplication
 

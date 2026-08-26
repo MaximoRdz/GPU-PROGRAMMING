@@ -34,6 +34,9 @@ int main(int argc, char* argv[])
     else if (command == "16") {
         Runi16fp16bf16Benchmark();
     }
+    else if (command == "tiling") {
+        RunTilingBenchmark();
+    }
     else if (command == "help" || command == "--help" || command == "-h") {
         PrintUsage(argv[0]);
     }
