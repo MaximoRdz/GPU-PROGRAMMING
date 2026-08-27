@@ -244,41 +244,41 @@ The strategy is to have a single warp responsible for a single 16$\times$16 sect
 
 Multidimensional arrays are ultimately stored in linear memory (e.g., random-access memory). The choice of how a matrix is laid out in memory may seem minor, but it has important implications for machine learning and, in particular, for matrix multiplication.
 
-Given a matrix \(A\) of shape \((M,N)\), with indices \(0 \le i < M\) and \(0 \le j < N\):
+Given a matrix $A$ of shape $(M,N)$, with indices $0 \le i < M$ and $0 \le j < N$:
 
-- **Row-major order:** consecutive elements in a row are contiguous in memory. The linear offset of \(A_{ij}\) is
-  \[
+- **Row-major order:** consecutive elements in a row are contiguous in memory. The linear offset of $A_{ij}$ is
+  $$
   \operatorname{offset}(A_{ij}) = iN + j.
-  \]
-  The **leading dimension** is \(N\).
+  $$
+  The **leading dimension** is $N$.
 
-- **Column-major order:** consecutive elements in a column are contiguous in memory. The linear offset of \(A_{ij}\) is
-  \[
+- **Column-major order:** consecutive elements in a column are contiguous in memory. The linear offset of $A_{ij}$ is
+  $$
   \operatorname{offset}(A_{ij}) = jM + i.
-  \]
-  The **leading dimension** is \(M\).
+  $$
+  The **leading dimension** is $M$.
 
-> **Note.** Here, *leading dimension* means the number of elements (or memory steps) between consecutive entries along the major dimension. In row-major storage, this is the number of columns \(N\); in column-major storage, it is the number of rows \(M\).
+> **Note.** Here, *leading dimension* means the number of elements (or memory steps) between consecutive entries along the major dimension. In row-major storage, this is the number of columns $N$; in column-major storage, it is the number of rows $M$.
 
 ### Reading a Transpose Without Copying
 
 A transpose does not necessarily require physically moving the data. We can instead reinterpret the same block of memory with different dimensions and strides.
 
-For a matrix \(A\):
+For a matrix $A$:
 
-- If \(A\) is **row-major**, reading the same memory as \(A^\mathrm{T}\) is equivalent to interpreting it as a **column-major** matrix of shape \((N,M)\).
-- If \(A\) is **column-major**, reading the same memory as \(A^\mathrm{T}\) is equivalent to interpreting it as a **row-major** matrix of shape \((N,M)\).
+- If $A$ is **row-major**, reading the same memory as $A^\mathrm{T}$ is equivalent to interpreting it as a **column-major** matrix of shape $(N,M)$.
+- If $A$ is **column-major**, reading the same memory as $A^\mathrm{T}$ is equivalent to interpreting it as a **row-major** matrix of shape $(N,M)$.
 
 Conceptually:
 
-\[
+$$
 \begin{aligned}
 \text{row-major } A
   &\equiv \text{column-major } A^\mathrm{T},\\
 \text{column-major } A
   &\equiv \text{row-major } A^\mathrm{T}.
 \end{aligned}
-\]
+$$
 
 This is a **view**, not a copy: the underlying bytes remain unchanged.
 
@@ -286,14 +286,14 @@ This is a **view**, not a copy: the underlying bytes remain unchanged.
 
 Because CPUs typically fetch memory in cache lines, accessing contiguous memory locations is generally more cache-friendly than accessing memory with a large stride.
 
-For a matrix \(A\):
+For a matrix $A$:
 
 | Storage layout | Fast / contiguous access | Strided access |
 |---|---|---|
-| Row-major \(A\) | Reading rows | Reading columns |
-| Row-major \(A^\mathrm{T}\) | Reading columns of \(A\) | Reading rows of \(A\) |
-| Column-major \(A\) | Reading columns | Reading rows |
-| Column-major \(A^\mathrm{T}\) | Reading rows of \(A\) | Reading columns of \(A\) |
+| Row-major $A$ | Reading rows | Reading columns |
+| Row-major $A^\mathrm{T}$ | Reading columns of $A$ | Reading rows of $A$ |
+| Column-major $A$ | Reading columns | Reading rows |
+| Column-major $A^\mathrm{T}$ | Reading rows of $A$ | Reading columns of $A$ |
 
 Thus, the same physical memory can be cache-friendly for different logical views depending on the storage order.
 
