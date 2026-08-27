@@ -301,60 +301,60 @@ Thus, the same physical memory can be cache-friendly for different logical views
 
 Consider
 
-\[
+$$
 C = AB,
-\]
+$$
 
 where
 
-\[
+$$
 A \in \mathbb{R}^{M\times K},\qquad
 B \in \mathbb{R}^{K\times N},\qquad
 C \in \mathbb{R}^{M\times N}.
-\]
+$$
 
 A matrix multiplication computes
 
-\[
+$$
 C_{ij} = \sum_{k=0}^{K-1} A_{ik}B_{kj}.
-\]
+$$
 
 A cache-friendly implementation should choose the loop order and/or storage layout so that the innermost loop accesses data contiguously whenever possible.
 
-For example, in a row-major layout, the elements \(A_{ik}\) are contiguous as \(k\) varies, while in a column-major layout, the elements \(B_{kj}\) are contiguous as \(k\) varies.
+For example, in a row-major layout, the elements $A_{ik}$ are contiguous as $k$ varies, while in a column-major layout, the elements $B_{kj}$ are contiguous as $k$ varies.
 
 This means that the statement
 
-> \(C=AB\) is faster when \(A\) is row-major and \(B\) is column-major
+> $C=AB$ is faster when $A$ is row-major and $B$ is column-major
 
 is **not universally true**. Performance depends on the loop ordering, matrix dimensions, cache hierarchy, blocking/tiling strategy, SIMD/vectorization, and the particular BLAS or compiler implementation.
 
 For the naïve triple-loop implementation, however, the storage layout and loop order should be chosen together. A common cache-friendly choice for row-major matrices is:
 
-\[
+$$
 C_{ij} \mathrel{+}= A_{ik}B_{kj},
-\]
+$$
 
-with the loop order \(i\rightarrow k\rightarrow j\), because \(B_{kj}\) is then accessed contiguously as \(j\) varies.
+with the loop order $i\rightarrow k\rightarrow j$, because $B_{kj}$ is then accessed contiguously as $j$ varies.
 
 ### Transposed Matrix Products
 
 The same principle applies to
 
-\[
+$$
 A^\mathrm{T}B,\qquad
 AB^\mathrm{T},\qquad
 A^\mathrm{T}B^\mathrm{T}.
-\]
+$$
 
 For reference:
 
 | Operation | Element-wise expression |
 |---|---|
-| \(AB\) | \(C_{ij}=\sum_k A_{ik}B_{kj}\) |
-| \(A^\mathrm{T}B\) | \(C_{ij}=\sum_k A_{ki}B_{kj}\) |
-| \(AB^\mathrm{T}\) | \(C_{ij}=\sum_k A_{ik}B_{jk}\) |
-| \(A^\mathrm{T}B^\mathrm{T}\) | \(C_{ij}=\sum_k A_{ki}B_{jk}\) |
+| $AB$ | $C_{ij}=\sum_k A_{ik}B_{kj}$ |
+| $A^\mathrm{T}B$ | $C_{ij}=\sum_k A_{ki}B_{kj}$ |
+| $AB^\mathrm{T}$ | $C_{ij}=\sum_k A_{ik}B_{jk}$ |
+| $A^\mathrm{T}B^\mathrm{T}$ | $C_{ij}=\sum_k A_{ki}B_{jk}$ |
 
 
 1. **Row-major:** the last index varies fastest in memory.
