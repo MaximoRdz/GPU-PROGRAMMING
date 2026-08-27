@@ -2,6 +2,27 @@
 
 C++ and CUDA implementations and optimization experiments.
 
+## Main Results (spoiler)
+
+### Full comparison
+
+All approaches all datatypes and CPU-GPU implementaitons, there are clearly to phases, for small matrices GPU overhead cannot match CPU direct speed.
+
+<p float="left">
+    <img src="./results/CompareBenchmarkAll.png" width="49%">
+    <img src="./results/CompareBenchmarkAll_linear.png" width="49%">
+</p>
+
+### GPU optimziations
+
+clear winner: tensor cores
+second: tiling
+
+<p float="left">
+    <img src="./results/CompareBenchmarkGPU.png" width="49%">
+    <img src="./results/CompareBenchmarkGPU_linear.png" width="49%">
+</p>
+
 ## Main Problem of Matrix Multiplication via Naive Implementation
 
 Once each thread is assigned a target `dst` (row, col), it has to perform an accumulation over the multiplication of the corresponding row and column elements of matrices `a` and `b` (as given by the equation).
@@ -238,6 +259,13 @@ The strategy is to have a single warp responsible for a single 16$\times$16 sect
             wmma::fill_fragment(acc_frag, 0.0f);
         ```
 - datatypes currently permitted and used by me: half and bf16
+
+
+<p float="left">
+    <img src="./results/tensor_cores_wmma.png" width="49%">
+    <img src="./results/tensor_cores_wmma_linear.png" width="49%">
+</p>
+
 ## Misc.
 
 ### Row-Major vs. Column-Major Order
