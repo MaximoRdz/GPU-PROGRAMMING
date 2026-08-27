@@ -246,10 +246,10 @@ Multidimensional arrays are ultimately stored in linear memory (e.g., random-acc
 
 Given a matrix $A$ of shape $(M,N)$, with indices $0 \le i \lt M$ and $0 \le j \lt N$:
 
-- **Row-major order:** consecutive elements in a row are contiguous in memory. The linear offset of $A_{ij}$ is $\operatorname{offset}(A_{ij}) = iN + j.$
+- **Row-major order:** consecutive elements in a row are contiguous in memory. The linear offset of $A_{ij}$ is $offset(A_{ij}) = iN + j.$
   The **leading dimension** is $N$.
 
-- **Column-major order:** consecutive elements in a column are contiguous in memory. The linear offset of $A_{ij}$ is $\operatorname{offset}(A_{ij}) = jM + i. $
+- **Column-major order:** consecutive elements in a column are contiguous in memory. The linear offset of $A_{ij}$ is $offset(A_{ij}) = jM + i. $
   The **leading dimension** is $M$.
 
 > **Note.** Here, *leading dimension* means the number of elements (or memory steps) between consecutive entries along the major dimension. In row-major storage, this is the number of columns $N$; in column-major storage, it is the number of rows $M$.
