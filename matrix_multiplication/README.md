@@ -225,9 +225,142 @@ $$
 
 at the warp level (32 threads). Given a large input matrix, the full MMA operation can be divided into multiple small GEMMs by dividing the matrices into smaller matrices and then collecting the final result as follows:
 
+The strategy is to have a single warp responsible for a single 16$\times$16 section of the output matrix. The difference with the tiling is that before we had each thread incharged of one output element, now with WMMA will have per-warp output patches of 16$\times$16. We don't index to fragment manually, we load the tile from memory into and opaque fragment and inside the hardware the 16$\times$16$\times$16 tensor core does the multiply and accumulate operation as one warp-wide unit
+
+- wmma fragment: templated type with template parameters that described:
+    - which matrix the fragment holds (A, B, or accumulator)
+    - shape fo the overall WMMA operation
+    - data type
+    - for A and B matrics also if they are row- or column-major
+        ```cuda
+            wmma::fragment<wmma::matrix_a, WMMA_M, WMMA_N, WMMA_K, half, wmma::col_major> a_frag;
+            wmma::fragment<wmma::accumulator, WMMA_M, WMMA_N, WMMA_K, float> acc_frag;
+            wmma::fill_fragment(acc_frag, 0.0f);
+        ```
+- datatypes currently permitted and used by me: half and bf16
 ## Misc.
 
-### Lambda Function in C++
+### Row-Major vs. Column-Major Order
+
+Multidimensional arrays are ultimately stored in linear memory (e.g., random-access memory). The choice of how a matrix is laid out in memory may seem minor, but it has important implications for machine learning and, in particular, for matrix multiplication.
+
+Given a matrix \(A\) of shape \((M,N)\), with indices \(0 \le i < M\) and \(0 \le j < N\):
+
+- **Row-major order:** consecutive elements in a row are contiguous in memory. The linear offset of \(A_{ij}\) is
+  \[
+  \operatorname{offset}(A_{ij}) = iN + j.
+  \]
+  The **leading dimension** is \(N\).
+
+- **Column-major order:** consecutive elements in a column are contiguous in memory. The linear offset of \(A_{ij}\) is
+  \[
+  \operatorname{offset}(A_{ij}) = jM + i.
+  \]
+  The **leading dimension** is \(M\).
+
+> **Note.** Here, *leading dimension* means the number of elements (or memory steps) between consecutive entries along the major dimension. In row-major storage, this is the number of columns \(N\); in column-major storage, it is the number of rows \(M\).
+
+### Reading a Transpose Without Copying
+
+A transpose does not necessarily require physically moving the data. We can instead reinterpret the same block of memory with different dimensions and strides.
+
+For a matrix \(A\):
+
+- If \(A\) is **row-major**, reading the same memory as \(A^\mathrm{T}\) is equivalent to interpreting it as a **column-major** matrix of shape \((N,M)\).
+- If \(A\) is **column-major**, reading the same memory as \(A^\mathrm{T}\) is equivalent to interpreting it as a **row-major** matrix of shape \((N,M)\).
+
+Conceptually:
+
+\[
+\begin{aligned}
+\text{row-major } A
+  &\equiv \text{column-major } A^\mathrm{T},\\
+\text{column-major } A
+  &\equiv \text{row-major } A^\mathrm{T}.
+\end{aligned}
+\]
+
+This is a **view**, not a copy: the underlying bytes remain unchanged.
+
+### Cache-Friendly Access
+
+Because CPUs typically fetch memory in cache lines, accessing contiguous memory locations is generally more cache-friendly than accessing memory with a large stride.
+
+For a matrix \(A\):
+
+| Storage layout | Fast / contiguous access | Strided access |
+|---|---|---|
+| Row-major \(A\) | Reading rows | Reading columns |
+| Row-major \(A^\mathrm{T}\) | Reading columns of \(A\) | Reading rows of \(A\) |
+| Column-major \(A\) | Reading columns | Reading rows |
+| Column-major \(A^\mathrm{T}\) | Reading rows of \(A\) | Reading columns of \(A\) |
+
+Thus, the same physical memory can be cache-friendly for different logical views depending on the storage order.
+
+### Matrix Multiplication
+
+Consider
+
+\[
+C = AB,
+\]
+
+where
+
+\[
+A \in \mathbb{R}^{M\times K},\qquad
+B \in \mathbb{R}^{K\times N},\qquad
+C \in \mathbb{R}^{M\times N}.
+\]
+
+A matrix multiplication computes
+
+\[
+C_{ij} = \sum_{k=0}^{K-1} A_{ik}B_{kj}.
+\]
+
+A cache-friendly implementation should choose the loop order and/or storage layout so that the innermost loop accesses data contiguously whenever possible.
+
+For example, in a row-major layout, the elements \(A_{ik}\) are contiguous as \(k\) varies, while in a column-major layout, the elements \(B_{kj}\) are contiguous as \(k\) varies.
+
+This means that the statement
+
+> \(C=AB\) is faster when \(A\) is row-major and \(B\) is column-major
+
+is **not universally true**. Performance depends on the loop ordering, matrix dimensions, cache hierarchy, blocking/tiling strategy, SIMD/vectorization, and the particular BLAS or compiler implementation.
+
+For the naïve triple-loop implementation, however, the storage layout and loop order should be chosen together. A common cache-friendly choice for row-major matrices is:
+
+\[
+C_{ij} \mathrel{+}= A_{ik}B_{kj},
+\]
+
+with the loop order \(i\rightarrow k\rightarrow j\), because \(B_{kj}\) is then accessed contiguously as \(j\) varies.
+
+### Transposed Matrix Products
+
+The same principle applies to
+
+\[
+A^\mathrm{T}B,\qquad
+AB^\mathrm{T},\qquad
+A^\mathrm{T}B^\mathrm{T}.
+\]
+
+For reference:
+
+| Operation | Element-wise expression |
+|---|---|
+| \(AB\) | \(C_{ij}=\sum_k A_{ik}B_{kj}\) |
+| \(A^\mathrm{T}B\) | \(C_{ij}=\sum_k A_{ki}B_{kj}\) |
+| \(AB^\mathrm{T}\) | \(C_{ij}=\sum_k A_{ik}B_{jk}\) |
+| \(A^\mathrm{T}B^\mathrm{T}\) | \(C_{ij}=\sum_k A_{ki}B_{jk}\) |
+
+
+1. **Row-major:** the last index varies fastest in memory.
+2. **Column-major:** the first index varies fastest in memory.
+
+### lambda function in c++
 
 ```c++
 [captures](parameters) {
@@ -237,11 +370,11 @@ at the warp level (32 threads). Given a large input matrix, the full MMA operati
 
 `[&]` allows the lambda function to access variables from the surrounding scope and use them, only by reference!
 
-# TODO
+# todo
 
-- [x] Performance for different data types and floating-point precisions.
-- [ ] Optimize approach: math-bound vs. compute-bound
-- [ ] Optimize with shared memory
-- [ ] Optimize with Tensor Cores
-- [ ] Compare against cuDNN or any official GEMM implementation
-- [ ] Batched matrix multiplication
+- [x] performance for different data types and floating-point precisions.
+- [x] optimize approach: math-bound vs. compute-bound
+- [x] optimize with shared memory
+- [ ] optimize with tensor cores
+- [ ] compare against cudnn or any official gemm implementation
+- [ ] batched matrix multiplication
