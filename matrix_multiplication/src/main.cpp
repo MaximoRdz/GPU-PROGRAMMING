@@ -37,6 +37,12 @@ int main(int argc, char* argv[])
     else if (command == "tiling") {
         RunTilingBenchmark();
     }
+    else if (command == "wmma") {
+        RunWMMABenchmark();
+    }
+    else if (command == "rowcol") {
+        RunRowColMajorExample();
+    }
     else if (command == "help" || command == "--help" || command == "-h") {
         PrintUsage(argv[0]);
     }

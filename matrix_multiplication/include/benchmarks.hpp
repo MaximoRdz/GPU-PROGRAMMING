@@ -9,7 +9,8 @@ void RunBasicMatmul();
 void RunDatatypeBenchmark();
 void Runi16fp16bf16Benchmark();
 void RunTilingBenchmark();
-
+void RunWMMABenchmark();
+void RunRowColMajorExample();
 
 template <typename Func>
 double TimeMatmulLatencyMicroseconds(
