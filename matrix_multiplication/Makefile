@@ -13,6 +13,7 @@ CXXFLAGS := -Wall -Wextra -std=c++17 -O2 \
             -MMD -MP
 
 NVCCFLAGS := -std=c++17 -O2 \
+			 -arch=sm_121 \
              -Iinclude \
              -MMD -MP
 
