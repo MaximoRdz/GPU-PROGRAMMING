@@ -43,6 +43,81 @@ Owned by user: the lifetime of a factory object must span the lifetime of object
 
 > *Execption: creating and engine from a builder. You can destroy the builder and keep using the engine
 
+#### Engine Deserialization and TRUST BOUNDARY
+
+engine files:
+- model graph
+- compiled cuda tactics
+- plugin invocation pointers
+- etc. (state that `IRunTime::deserializeCudaEngine` instantiates inside process)
+
+> Deserializing and engine is **equivalent** to executing untrusted native code on the GPU
+
+### Error Handling and Logging
+
+TensorRT top-level interfaces (builder, runtime, ...) required our own implementation of the `Logger` interface (it must be thread-safe). The logger will propagate down and be used downstream:
+`runtime logger -> creates execution context -> enqueue` will use the upper logger.
+
+[Python Error Recoder interface](https://docs.nvidia.com/deeplearning/tensorrt/latest/_static/python-api/infer/Core/ErrorRecorder.html): CUDA errors are generally asynchronous, the main problem is, then, that somw CUDA errors are **sticky** and contageous, meaning other execution contexts from different engines could show the same unrelated error. Refer to the [Cross-Context cuda error isolation guide](https://docs.nvidia.com/deeplearning/tensorrt/latest/architecture/how-trt-works.html#cross-context-cuda-error-isolation)
+
+### Memory
+
+TensorRT uses quite a lot of GPU memory as opposed to host memory.
+
+#### The build phase
+
+TRT allocates device memory for timing layer implementations (large amounts of temporary memory for large tensors), maximum allowed temporary memory can be controled  through `memory pool limits` of the builder config. the `workspace size` defaults to the full size of the device's global memory but can also be restricted at will. Timing requires creating buffers for intput, output and weights, TRT directly handle Out-of-memory (OOO) operating system errors coming from such allcoations.
+
+During the build phase at least **2 copies of the model weights** are in host memory (1) original network and (2) those in the engine as we build it. Weight combination, e.g. `convolution + batch normalization` requires some extra host memory as well.
+
+> all this affects mainly host memory and can be monitored via `trtexec --monitorMemory`
+
+#### The runtime phase
+
+opposite as before, now host memory is barely used but can use considerable device memory.
+
+* Memory allocation on device, model weights after deserialization of the engine
+* statistics about the engine can be retrieved via `ICudaEngine::getEngineStat()`
+    - `ktotal-weight-size` total size in bytes of the weights
+    - `kstripped-weight-size` size in bytes of stripped weights for stripped-built engines
+* `ExecutionContext` memory usage
+    - some layers implementations require persistent memory, e.g. convolutions with edge masks, and these cannot be shared accross contexts because its size is input-dependant. Mmemory allcoated at the craetion of the context and lasts for its lifetime
+    - enqueue memory holds intermediate results while processing the network: intermediate tensors (activation memory), temporary storage (scratch memory, bounded via `setMemoryPoolLimit()`). TRT does optimize this memory usage:
+        - sharing a block of device memory across activatoin tensors with disjoint lifetimes
+        - allowing transient (scratch) tensors to occupy unused activation memory where feasible
+    * enqueue memory is a very rich area of tensorRT:
+        - memory range `[total activation memory, total activation memory + scratch memory]`
+        - `ICudaEngine::createExecutionContextWithoutDeviceMemory()` no enqueue memory config, use that memory for some else
+
+> By default, TensorRT allocates device memory directly from CUDA. However, you can attach an implementation of TensorRT’s IGpuAllocator interface (C++, Python) to the builder or runtime and manage device memory yourself.
+
+#### CUDA Lazy loading
+
+reduce peak GPU and host memory usage of TRT and speed up initialization (they say $\lt 1\%$ performance impact). Environment variable `CUDA_MODULE_LOADING=LAZY`
+
+#### L2 Persistent Cache Managment
+
+For NVIDIA architectures later than Ampere L2 cache persistence is supported. It allows for L2 cache lines for retention when a line is chosen for eviction, choose what you wish to retain to reduce DRAM traffic and power consumption. Cache-allocation is per-execution context (`setPersistentCacheLimit`) and the total persistent cache among all contexts should not exceed `cudaDeviceProp::persistingL2CacheMaxSize`.
+
+#### Threading
+
+Shared objects: runtime deserializes the engines, each engine can create an execution context each on a thread with its own network state. From there we can distinguish two types of operations:
+- thread-safe: non-modifiying access to runtime/engine, deserializing an engine, creating executing context and registering/deregistering plugins
+- not thread-safe: concurrent access to shared objects from different threads and using the same execution context from different threads
+
+![threading](https://docs.nvidia.com/deeplearning/tensorrt/latest/_images/trt-threading-model.svg)
+
+This is a delicate topic as there are operations thread-safe like using multiple builders but, in spite of that, they can still interfer with each other, e.g. the buildir timing interface will not yield the best kernel possible if the GPU is utilized by something else.
+
+#### Determinism
+
+> The TensorRT builder uses timing to find the fastest kernel to implement a given layer. Timing kernels are subject to noise, such as other work running on the GPU and GPU clock speed fluctuations. 
+
+> The Editable Timing Cache mechanism allows you to force the builder to pick a particular implementation for a given layer. Use this to ensure the builder picks the same kernels from run to run. 
+
+#### Runtime Options
+
+This is usefull for C++ applications (link to the appropriate library), default, lean (lighter), and dispatch. For python applications the same can be accessed via different packages: tensorrt, tensorrt_lean, and tensorrt_dispatch.
 
 ## End2end Naive tutorial
 
@@ -103,3 +178,6 @@ Turning a TensorRT model into trustworthy numbers (latency, throughput, per-laye
 1. https://docs.nvidia.com/deeplearning/tensorrt/latest/index.html
 1. https://developer.nvidia.com/blog/accelerating-inference-up-to-6x-faster-in-pytorch-with-torch-tensorrt/
 1. https://docs.nvidia.com/deeplearning/tensorrt/latest/performance/best-practices.html#best-practices
+
+# TODO
+- [ ] implement weight combination of layers optimization, e.g. `convolution + batch norm`
